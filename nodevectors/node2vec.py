@@ -24,7 +24,7 @@ class Node2Vec(BaseNodeEmbedder):
         threads=0, 
         keep_walks=False,
         verbose=True,
-        w2vparams={"window":10, "negative":5, "iter":10,
+        w2vparams={"window":10, "negative":5, "epochs":10,
                    "batch_words":128}):
         """
         Parameters
@@ -66,7 +66,7 @@ class Node2Vec(BaseNodeEmbedder):
         self.walklen = walklen
         self.epochs = epochs
         self.keep_walks = keep_walks
-        if 'size' in w2vparams.keys():
+        if 'vector_size' in w2vparams.keys():
             raise AttributeError("Embedding dimensions should not be set "
                 + "through w2v parameters, but through n_components")
         self.w2vparams = w2vparams
@@ -107,7 +107,7 @@ class Node2Vec(BaseNodeEmbedder):
                                     return_weight=self.return_weight,
                                     neighbor_weight=self.neighbor_weight)
         if self.verbose:
-            print(f"Done, T={time.time() - walks_t:.2f}")
+            print(f"Done ({len(self.walks):,} walks), T={time.time() - walks_t:.2f}")
             print("Mapping Walk Names...", end=" ", flush=True)
         map_t = time.time()
         self.walks = pd.DataFrame(self.walks)
@@ -129,7 +129,7 @@ class Node2Vec(BaseNodeEmbedder):
         # Train gensim word2vec model on random walks
         self.model = gensim.models.Word2Vec(
             sentences=self.walks,
-            size=self.n_components,
+            vector_size=self.n_components,
             **self.w2vparams)
         if not self.keep_walks:
             del self.walks
