@@ -3,12 +3,14 @@ import numpy as np
 import pandas as pd
 import time
 import warnings
+import logging
 
 # Gensim triggers automatic useless warnings for windows users...
 warnings.simplefilter("ignore", category=UserWarning)
 import gensim
 warnings.simplefilter("default", category=UserWarning)
 
+LOGGER = logging.getLogger(__name__)
 
 import csrgraph as cg
 from nodevectors.embedders import BaseNodeEmbedder
@@ -23,7 +25,6 @@ class Node2Vec(BaseNodeEmbedder):
         neighbor_weight=1.,
         threads=0, 
         keep_walks=False,
-        verbose=True,
         w2vparams={"window":10, "negative":5, "epochs":10,
                    "batch_words":128}):
         """
@@ -76,7 +77,6 @@ class Node2Vec(BaseNodeEmbedder):
             threads = numba.config.NUMBA_DEFAULT_NUM_THREADS
         self.threads = threads
         w2vparams['workers'] = threads
-        self.verbose = verbose
 
     def fit(self, G):
         """
@@ -98,17 +98,17 @@ class Node2Vec(BaseNodeEmbedder):
         if type(node_names[0]) not in [int, str, np.int32, np.uint32, 
                                        np.int64, np.uint64]:
             raise ValueError("Graph node names must be int or str!")
+        
+        LOGGER.info(f'Preforming {self.epochs*G.nnodes:,} random walks')
+        
         # Adjacency matrix
         walks_t = time.time()
-        if self.verbose:
-            print("Making walks...", end=" ", flush=True)
         self.walks = G.random_walks(walklen=self.walklen, 
                                     epochs=self.epochs,
                                     return_weight=self.return_weight,
                                     neighbor_weight=self.neighbor_weight)
-        if self.verbose:
-            print(f"Done ({len(self.walks):,} walks), T={time.time() - walks_t:.2f}")
-            print("Mapping Walk Names...", end=" ", flush=True)
+        LOGGER.info(f"Preformed {len(self.walks):,} walks in {time.time() - walks_t:.2f} seconds")
+        LOGGER.info("Mapping Walk Names")
         map_t = time.time()
         self.walks = pd.DataFrame(self.walks)
         # Map nodeId -> node name
@@ -118,13 +118,10 @@ class Node2Vec(BaseNodeEmbedder):
         # Somehow gensim only trains on this list iterator
         # it silently mistrains on array input
         self.walks = [list(x) for x in self.walks.itertuples(False, None)]
-        if self.verbose:
-            print(f"Done, T={time.time() - map_t:.2f}")
-            print("Training W2V...", end=" ", flush=True)
-            if gensim.models.word2vec.FAST_VERSION < 1:
-                print("WARNING: gensim word2vec version is unoptimized"
-                    "Try version 3.6 if on windows, versions 3.7 "
-                    "and 3.8 have had issues")
+        LOGGER.info(f"Walk names mapped in {time.time() - map_t:.2f} seconds")
+        LOGGER.info("Training word2vec model")
+        if gensim.models.word2vec.FAST_VERSION < 1:
+            LOGGER.warning("WARNING: gensim word2vec version is unoptimized")
         w2v_t = time.time()
         # Train gensim word2vec model on random walks
         self.model = gensim.models.Word2Vec(
@@ -133,8 +130,7 @@ class Node2Vec(BaseNodeEmbedder):
             **self.w2vparams)
         if not self.keep_walks:
             del self.walks
-        if self.verbose:
-            print(f"Done, T={time.time() - w2v_t:.2f}")
+        LOGGER.info(f"Finished training word2vec model in {time.time() - w2v_t:.2f} seconds")
 
     def fit_transform(self, G):
         """
